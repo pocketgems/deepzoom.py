@@ -97,9 +97,8 @@ class DeepZoomImageDescriptor(object):
         self.tile_overlap = int(image.getAttribute('Overlap'))
         self.tile_format = image.getAttribute('Format')
 
-    def save(self, destination):
-        """Save descriptor file."""
-        file = open(destination, 'w')
+    def to_xml_str(self):
+        """Return descriptor file contents."""
         doc = xml.dom.minidom.Document()
         image = doc.createElementNS(NS_DEEPZOOM, 'Image')
         image.setAttribute('xmlns', NS_DEEPZOOM)
@@ -111,9 +110,7 @@ class DeepZoomImageDescriptor(object):
         size.setAttribute('Height', str(self.height))
         image.appendChild(size)
         doc.appendChild(image)
-        descriptor = doc.toxml(encoding='UTF-8')
-        file.write(descriptor)
-        file.close()
+        return doc.toxml(encoding='UTF-8')
 
     @classmethod
     def remove(self, filename):
@@ -379,9 +376,9 @@ class ImageCreator(object):
             for row in xrange(rows):
                 yield (column, row)
 
-    def create(self, source, destination):
-        """Creates Deep Zoom image from source file and saves it to destination."""
-        self.image = PIL.Image.open(safe_open(source))
+    def create(self, img):
+        """Creates Deep Zoom image from img and returns a dict of files to create."""
+        self.image = img
         width, height = self.image.size
         self.descriptor = DeepZoomImageDescriptor(width=width,
                                                   height=height,
@@ -389,24 +386,25 @@ class ImageCreator(object):
                                                   tile_overlap=self.tile_overlap,
                                                   tile_format=self.tile_format)
         # Create tiles
-        image_files = _get_or_create_path(_get_files_path(destination))
+        ret = {}
         for level in xrange(self.descriptor.num_levels):
-            level_dir = _get_or_create_path(os.path.join(image_files, str(level)))
+            level_tiles = ret[level] = {}
             level_image = self.get_image(level)
             for (column, row) in self.tiles(level):
                 bounds = self.descriptor.get_tile_bounds(level, column, row)
                 tile = level_image.crop(bounds)
                 format = self.descriptor.tile_format
-                tile_path = os.path.join(level_dir,
-                                         '%s_%s.%s'%(column, row, format))
-                tile_file = open(tile_path, 'wb')
+                sio = StringIO.StringIO()
                 if self.descriptor.tile_format == 'jpg':
                     jpeg_quality = int(self.image_quality * 100)
-                    tile.save(tile_file, 'JPEG', quality=jpeg_quality)
+                    tile.save(sio, 'JPEG', quality=jpeg_quality)
                 else:
-                    tile.save(tile_file)
+                    tile.save(sio)
+                tile_name = '%s_%s.%s' % (column, row, format)
+                level_tiles[tile_name] = sio.getvalue()
         # Create descriptor
-        self.descriptor.save(destination)
+        ret['output.dzi'] = self.descriptor.to_xml_str()
+        return ret
 
 
 class CollectionCreator(object):
