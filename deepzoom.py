@@ -388,7 +388,7 @@ class ImageCreator(object):
         # Create tiles
         ret = {}
         for level in xrange(self.descriptor.num_levels):
-            level_tiles = ret[level] = {}
+            level_tiles = ret['output_files/%d' % level] = {}
             level_image = self.get_image(level)
             for (column, row) in self.tiles(level):
                 bounds = self.descriptor.get_tile_bounds(level, column, row)
